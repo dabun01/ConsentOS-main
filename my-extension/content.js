@@ -1,231 +1,301 @@
-// ConsentOS Content Script - Intercepts consent popups
-(function () {
-  "use strict";
+(() => {
+  const MAX_FINAL_LENGTH = 7000;
 
-  const CONSENT_KEYWORDS = [
-    "cookie",
-    "consent",
-    "privacy",
-    "terms",
-    "accept",
-    "agree",
-    "gdpr",
-    "data processing",
-    "terms of service",
-    "privacy policy",
-  ];
-
-  const CONSENT_SELECTORS = [
-    '[class*="cookie"]',
-    '[class*="consent"]',
-    '[class*="privacy"]',
-    '[id*="cookie"]',
-    '[id*="consent"]',
-    '[role="dialog"]',
-    '[class*="modal"]',
-    '[class*="banner"]',
-  ];
-
-  let analyzedPopups = new Set();
-  let overlayActive = false;
-
-  // Detect potential consent popup
-  function isConsentPopup(element) {
-    const text = element.innerText?.toLowerCase() || "";
-    const hasKeyword = CONSENT_KEYWORDS.some((keyword) =>
-      text.includes(keyword),
+  function isVisible(el) {
+    const style = window.getComputedStyle(el);
+    return (
+      style &&
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      el.offsetWidth > 0 &&
+      el.offsetHeight > 0
     );
-    const hasAcceptButton = element.querySelector(
-      'button[class*="accept"], button[class*="agree"]',
-    );
-
-    return hasKeyword && hasAcceptButton && element.offsetHeight > 100;
   }
 
-  // Extract consent text from popup
-  function extractConsentText(element) {
-    const links = element.querySelectorAll(
-      'a[href*="privacy"], a[href*="terms"], a[href*="cookie"]',
-    );
-    const text = element.innerText;
-    const urls = Array.from(links).map((link) => link.href);
+  function normalizeWhitespace(text) {
+    return (text || "").replace(/\s+/g, " ").trim();
+  }
 
+  function getCandidateElements() {
+    const selectors = [
+      '[id*="cookie" i]',
+      '[class*="cookie" i]',
+      '[id*="consent" i]',
+      '[class*="consent" i]',
+      '[id*="privacy" i]',
+      '[class*="privacy" i]',
+      '[id*="gdpr" i]',
+      '[class*="gdpr" i]',
+      '[id*="cmp" i]',
+      '[class*="cmp" i]',
+      '[id*="onetrust" i]',
+      '[class*="onetrust" i]',
+      '[id*="trustarc" i]',
+      '[class*="trustarc" i]',
+      '[aria-label*="cookie" i]',
+      '[aria-label*="consent" i]',
+      '[aria-label*="privacy" i]',
+      '[role="dialog"]',
+      '[role="alertdialog"]',
+      "dialog",
+      "main",
+      "footer",
+      "section",
+      "aside",
+      "div",
+    ];
+
+    const seen = new Set();
+    const elements = [];
+
+    for (const selector of selectors) {
+      document.querySelectorAll(selector).forEach((el) => {
+        if (!seen.has(el)) {
+          seen.add(el);
+          elements.push(el);
+        }
+      });
+    }
+
+    return elements;
+  }
+
+  function looksLikeConsentText(text) {
+    const keywords = [
+      "cookie",
+      "cookies",
+      "consent",
+      "privacy",
+      "data policy",
+      "policy",
+      "gdpr",
+      "ccpa",
+      "legitimate interest",
+      "vendors",
+      "personal data",
+      "your data",
+      "tracking",
+      "advertising",
+      "analytics",
+      "accept",
+      "reject",
+      "preferences",
+      "partners",
+    ];
+
+    const lower = text.toLowerCase();
+    const hits = keywords.filter((word) => lower.includes(word));
+    return hits.length >= 2;
+  }
+
+  function getElementLabel(el) {
+    const parts = [el.tagName.toLowerCase()];
+    if (el.id) parts.push(`#${el.id}`);
+
+    const className = (el.className || "").toString().trim();
+    if (className) {
+      const firstClass = className.split(/\s+/)[0];
+      if (firstClass) parts.push(`.${firstClass}`);
+    }
+
+    return parts.join("");
+  }
+
+  function scoreConsentText(text, el) {
+    const lower = text.toLowerCase();
+    let score = 0;
+
+    [
+      "cookie",
+      "consent",
+      "privacy",
+      "tracking",
+      "analytics",
+      "partners",
+      "vendors",
+      "personal data",
+      "preferences",
+      "accept",
+      "reject",
+    ].forEach((word) => {
+      if (lower.includes(word)) score += 1;
+    });
+
+    if (el.getAttribute("role") === "dialog") score += 3;
+    if (el.getAttribute("role") === "alertdialog") score += 2;
+
+    const idText = (el.id || "").toLowerCase();
+    const classText = (el.className || "").toString().toLowerCase();
+
+    if (idText.includes("cookie") || classText.includes("cookie")) score += 2;
+    if (idText.includes("consent") || classText.includes("consent")) score += 2;
+    if (idText.includes("gdpr") || classText.includes("gdpr")) score += 2;
+    if (idText.includes("onetrust") || classText.includes("onetrust"))
+      score += 2;
+
+    return score;
+  }
+
+  function collectNearbyActionLabels(container) {
+    const controls = container.querySelectorAll(
+      'button, [role="button"], a, input[type="button"], input[type="submit"]',
+    );
+
+    const actionKeywords = [
+      "accept",
+      "agree",
+      "allow",
+      "reject",
+      "deny",
+      "decline",
+      "manage",
+      "preferences",
+      "settings",
+      "save",
+      "continue",
+    ];
+
+    const labels = [];
+    const seen = new Set();
+
+    controls.forEach((control) => {
+      if (!isVisible(control)) return;
+
+      const label = normalizeWhitespace(
+        control.innerText ||
+          control.value ||
+          control.getAttribute("aria-label") ||
+          "",
+      );
+
+      if (!label || label.length > 80) return;
+
+      const lower = label.toLowerCase();
+      if (!actionKeywords.some((word) => lower.includes(word))) return;
+      if (seen.has(lower)) return;
+
+      seen.add(lower);
+      labels.push(label);
+    });
+
+    return labels.slice(0, 8);
+  }
+
+  function collectPolicyLinks() {
+    const policyKeywords = [
+      "privacy",
+      "cookie",
+      "policy",
+      "preferences",
+      "consent",
+    ];
+    const links = [];
+    const seen = new Set();
+
+    document.querySelectorAll("a[href]").forEach((link) => {
+      if (!isVisible(link)) return;
+
+      const label = normalizeWhitespace(
+        link.innerText || link.getAttribute("aria-label") || "",
+      );
+      const href = link.href || "";
+      const haystack = `${label} ${href}`.toLowerCase();
+
+      if (!policyKeywords.some((word) => haystack.includes(word))) return;
+      if (!href || seen.has(href)) return;
+
+      seen.add(href);
+      links.push({
+        label: label || "(no link text)",
+        href,
+      });
+    });
+
+    return links.slice(0, 8);
+  }
+
+  function buildContextText(matches, policyLinks) {
+    const lines = [];
+
+    lines.push("Primary consent context:");
+    lines.push(matches[0].text);
+
+    if (matches.length > 1) {
+      lines.push("");
+      lines.push("Additional related consent text:");
+      matches.slice(1).forEach((match, idx) => {
+        lines.push(`${idx + 1}. (${match.label}) ${match.text}`);
+      });
+    }
+
+    const allActions = Array.from(
+      new Set(
+        matches.flatMap((match) => match.actions.map((a) => a.toLowerCase())),
+      ),
+    );
+
+    if (allActions.length > 0) {
+      lines.push("");
+      lines.push("Visible consent actions:");
+      allActions.forEach((action) => lines.push(`- ${action}`));
+    }
+
+    if (policyLinks.length > 0) {
+      lines.push("");
+      lines.push("Related policy links:");
+      policyLinks.forEach((link) =>
+        lines.push(`- ${link.label}: ${link.href}`),
+      );
+    }
+
+    return lines.join("\n").slice(0, MAX_FINAL_LENGTH);
+  }
+
+  const candidates = getCandidateElements();
+
+  const matches = [];
+
+  for (const el of candidates) {
+    if (!isVisible(el)) continue;
+
+    const text = normalizeWhitespace(el.innerText || "");
+    if (text.length < 40 || text.length > 3000) continue;
+    if (!looksLikeConsentText(text)) continue;
+
+    matches.push({
+      score: scoreConsentText(text, el),
+      text,
+      label: getElementLabel(el),
+      actions: collectNearbyActionLabels(el),
+    });
+  }
+
+  if (matches.length === 0) {
     return {
-      text: text.substring(0, 5000), // Limit text length
-      urls: urls,
-      html: element.outerHTML.substring(0, 3000),
+      ok: false,
+      message: "No consent text found.",
     };
   }
 
-  // Create ConsentOS overlay
-  function createOverlay(consentData, analysis) {
-    if (overlayActive) return;
-    overlayActive = true;
+  matches.sort((a, b) => b.score - a.score || b.text.length - a.text.length);
 
-    const overlay = document.createElement("div");
-    overlay.id = "consent-os-overlay";
-    overlay.innerHTML = `
-      <div class="consent-os-modal">
-        <div class="consent-os-header">
-          <h2>🛡️ ConsentOS Analysis</h2>
-          <button class="consent-os-close" id="consent-close">✕</button>
-        </div>
-        <div class="consent-os-content">
-          <div class="analysis-section">
-            <h3>📝 What You're Actually Agreeing To:</h3>
-            <p class="summary">${analysis.summary || "Analyzing..."}</p>
-          </div>
-          <div class="analysis-section warning">
-            <h3>⚠️ Potential Concerns:</h3>
-            <ul class="concerns">
-              ${(analysis.concerns || []).map((c) => `<li>${c}</li>`).join("")}
-            </ul>
-          </div>
-          <div class="analysis-section">
-            <h3>🔍 Data They'll Collect:</h3>
-            <ul class="data-collection">
-              ${(analysis.dataCollection || []).map((d) => `<li>${d}</li>`).join("")}
-            </ul>
-          </div>
-          <div class="analysis-section">
-            <h3>💡 Recommendation:</h3>
-            <p class="recommendation ${analysis.recommendationLevel}">${analysis.recommendation || "Review carefully"}</p>
-          </div>
-        </div>
-        <div class="consent-os-footer">
-          <button class="btn-secondary" id="consent-decline">Decline</button>
-          <button class="btn-primary" id="consent-proceed">I Understand, Proceed</button>
-        </div>
-      </div>
-    `;
+  const deduped = [];
+  const seenText = new Set();
 
-    document.body.appendChild(overlay);
-
-    // Event listeners
-    document.getElementById("consent-close").addEventListener("click", () => {
-      overlay.remove();
-      overlayActive = false;
-    });
-
-    document.getElementById("consent-decline").addEventListener("click", () => {
-      overlay.remove();
-      overlayActive = false;
-      // User declined - try to find and click decline button
-      findAndClickDecline();
-    });
-
-    document.getElementById("consent-proceed").addEventListener("click", () => {
-      overlay.remove();
-      overlayActive = false;
-      // User understood and wants to proceed - they can now interact with original popup
-    });
+  for (const match of matches) {
+    const key = match.text.toLowerCase();
+    if (seenText.has(key)) continue;
+    seenText.add(key);
+    deduped.push(match);
+    if (deduped.length >= 3) break;
   }
 
-  // Try to find and click decline/reject button
-  function findAndClickDecline() {
-    const declineButtons = document.querySelectorAll(
-      'button[class*="reject"], button[class*="decline"], ' +
-        'button:not([class*="accept"]):not([class*="agree"])',
-    );
+  const policyLinks = collectPolicyLinks();
+  const contextText = buildContextText(deduped, policyLinks);
 
-    for (let btn of declineButtons) {
-      if (
-        btn.innerText.toLowerCase().includes("reject") ||
-        btn.innerText.toLowerCase().includes("decline")
-      ) {
-        btn.click();
-        break;
-      }
-    }
-  }
-
-  // Analyze consent popup with background script
-  async function analyzeConsent(consentData) {
-    return new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        { action: "analyzeConsent", data: consentData },
-        (response) => {
-          resolve(response);
-        },
-      );
-    });
-  }
-
-  // Observer to detect new consent popups
-  const observer = new MutationObserver(async (mutations) => {
-    for (let mutation of mutations) {
-      for (let node of mutation.addedNodes) {
-        if (node.nodeType === 1) {
-          // Element node
-          // Check if node or its children match consent selectors
-          const candidates = [
-            node,
-            ...node.querySelectorAll(CONSENT_SELECTORS.join(",")),
-          ];
-
-          for (let candidate of candidates) {
-            if (
-              candidate &&
-              !analyzedPopups.has(candidate) &&
-              isConsentPopup(candidate)
-            ) {
-              analyzedPopups.add(candidate);
-
-              const consentData = extractConsentText(candidate);
-              console.log(
-                "[ConsentOS] Detected consent popup, analyzing...",
-                consentData,
-              );
-
-              // Show loading overlay
-              createOverlay(consentData, {
-                summary: "🔄 Analyzing terms with AI...",
-                concerns: ["Analysis in progress..."],
-                dataCollection: ["Scanning for data collection practices..."],
-                recommendation: "Please wait...",
-                recommendationLevel: "neutral",
-              });
-
-              // Get AI analysis
-              const analysis = await analyzeConsent(consentData);
-
-              // Update overlay with actual analysis
-              const existingOverlay =
-                document.getElementById("consent-os-overlay");
-              if (existingOverlay) {
-                existingOverlay.remove();
-                overlayActive = false;
-                createOverlay(consentData, analysis);
-              }
-
-              break;
-            }
-          }
-        }
-      }
-    }
-  });
-
-  // Start observing
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-  });
-
-  // Check for existing consent popups on page load
-  setTimeout(() => {
-    CONSENT_SELECTORS.forEach((selector) => {
-      document.querySelectorAll(selector).forEach((element) => {
-        if (!analyzedPopups.has(element) && isConsentPopup(element)) {
-          analyzedPopups.add(element);
-          const consentData = extractConsentText(element);
-          analyzeConsent(consentData).then((analysis) => {
-            createOverlay(consentData, analysis);
-          });
-        }
-      });
-    });
-  }, 1000);
-
-  console.log("[ConsentOS] Content script initialized");
+  return {
+    ok: true,
+    text: contextText,
+    message: `Consent context found (${deduped.length} section${deduped.length > 1 ? "s" : ""}).`,
+  };
 })();

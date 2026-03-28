@@ -1,64 +1,161 @@
-// ConsentOS Popup Script
-document.addEventListener("DOMContentLoaded", () => {
-  loadHistory();
+const analyzeBtn = document.getElementById("analyzeBtn");
+const output = document.getElementById("output");
+const extractedText = document.getElementById("extractedText");
+const status = document.getElementById("status");
+const toggleExtractedBtn = document.getElementById("toggleExtractedBtn");
+const riskBadge = document.getElementById("riskBadge");
 
-  document
-    .getElementById("clear-history")
-    .addEventListener("click", clearHistory);
+function escapeHtml(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderJsonWithHighlight(value) {
+  const pretty = JSON.stringify(value, null, 2);
+  const escaped = escapeHtml(pretty);
+
+  const highlighted = escaped.replace(
+    /(\"([^\"\\]|\\.)*\"\s*:|\"([^\"\\]|\\.)*\"|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
+    (match) => {
+      if (match.endsWith(":")) {
+        return `<span class="json-key">${match}</span>`;
+      }
+      if (match.startsWith('"')) {
+        return `<span class="json-string">${match}</span>`;
+      }
+      if (match === "true" || match === "false") {
+        return `<span class="json-boolean">${match}</span>`;
+      }
+      if (match === "null") {
+        return `<span class="json-null">${match}</span>`;
+      }
+      return `<span class="json-number">${match}</span>`;
+    },
+  );
+
+  output.innerHTML = highlighted;
+}
+
+function getRiskScore(summary) {
+  const direct = Number(summary?.consentRiskScore?.score);
+  if (Number.isFinite(direct)) return direct;
+
+  const fallback = Number(summary?.riskScore);
+  if (Number.isFinite(fallback)) return fallback;
+
+  return null;
+}
+
+function setRiskBadge(score) {
+  riskBadge.classList.remove("risk-low", "risk-medium", "risk-high");
+
+  if (!Number.isFinite(score)) {
+    riskBadge.textContent = "N/A";
+    return;
+  }
+
+  const normalized = Math.max(1, Math.min(10, Math.round(score)));
+  riskBadge.textContent = `${normalized}/10`;
+
+  if (normalized <= 3) {
+    riskBadge.classList.add("risk-low");
+    return;
+  }
+
+  if (normalized <= 6) {
+    riskBadge.classList.add("risk-medium");
+    return;
+  }
+
+  riskBadge.classList.add("risk-high");
+}
+
+function setBusyState(isBusy, statusText) {
+  analyzeBtn.disabled = isBusy;
+  analyzeBtn.textContent = isBusy ? "Analyzing..." : "Analyze This Page";
+  status.textContent = statusText;
+}
+
+toggleExtractedBtn.addEventListener("click", () => {
+  const isCollapsed = extractedText.classList.toggle("collapsed");
+  toggleExtractedBtn.textContent = isCollapsed ? "Expand" : "Collapse";
+  toggleExtractedBtn.setAttribute("aria-expanded", String(!isCollapsed));
 });
 
-function loadHistory() {
-  chrome.storage.local.get(["history"], (result) => {
-    const history = result.history || [];
+analyzeBtn.addEventListener("click", async () => {
+  setBusyState(true, "Extracting consent context from the page...");
+  output.textContent = "Extracting consent text...";
+  extractedText.textContent = "Extracting consent text...";
+  setRiskBadge(null);
 
-    // Update stats
-    document.getElementById("total-analyzed").textContent = history.length;
-
-    // Update history list
-    const historyList = document.getElementById("history-list");
-
-    if (history.length === 0) {
-      historyList.innerHTML = `
-        <div class="empty-state">
-          <p>No consent popups analyzed yet.</p>
-          <p style="margin-top: 8px; font-size: 12px;">Visit websites and ConsentOS will automatically detect and analyze consent popups!</p>
-        </div>
-      `;
-    } else {
-      historyList.innerHTML = history
-        .slice(0, 5)
-        .map((item) => {
-          const date = new Date(item.timestamp);
-          const timeAgo = getTimeAgo(date);
-
-          return `
-          <div class="history-item">
-            <div class="history-domain">${item.domain}</div>
-            <div class="history-time">${timeAgo}</div>
-            <span class="history-recommendation recommendation-${item.analysis.recommendationLevel}">
-              ${item.analysis.recommendationLevel.toUpperCase()}
-            </span>
-          </div>
-        `;
-        })
-        .join("");
-    }
-  });
-}
-
-function clearHistory() {
-  if (confirm("Clear all analysis history?")) {
-    chrome.storage.local.set({ history: [] }, () => {
-      loadHistory();
+  try {
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
     });
+
+    if (!tab?.id) {
+      output.textContent = "Could not find active tab.";
+      extractedText.textContent = "Could not find active tab.";
+      setBusyState(false, "No active tab detected.");
+      return;
+    }
+
+    const injectionResults = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["content.js"],
+    });
+
+    const extracted = injectionResults?.[0]?.result;
+
+    if (!extracted?.ok) {
+      output.textContent = extracted?.message || "No consent text found.";
+      extractedText.textContent =
+        extracted?.message || "No consent text found.";
+      setBusyState(false, "No consent banner was detected on this page.");
+      return;
+    }
+
+    extractedText.textContent = extracted.text;
+    setBusyState(true, "Generating structured JSON summary...");
+
+    output.textContent = "Sending text to Gemini...";
+
+    const response = await chrome.runtime.sendMessage({
+      type: "SUMMARIZE_CONSENT",
+      consentText: extracted.text,
+    });
+
+    if (!response?.ok) {
+      output.textContent = `AI error: ${response?.error || "Unknown error"}`;
+      setBusyState(false, "AI request failed. Please try again.");
+      return;
+    }
+
+    let summaryData = response.summary;
+
+    if (typeof response.summary === "string") {
+      try {
+        summaryData = JSON.parse(response.summary);
+      } catch {
+        output.textContent = response.summary;
+        setRiskBadge(null);
+        setBusyState(false, "Analysis complete.");
+        return;
+      }
+    }
+
+    renderJsonWithHighlight(summaryData);
+    setRiskBadge(getRiskScore(summaryData));
+    setBusyState(false, "Analysis complete.");
+  } catch (error) {
+    output.textContent = `Error: ${error.message}`;
+    extractedText.textContent = `Error: ${error.message}`;
+    setRiskBadge(null);
+    setBusyState(false, "Unexpected error while analyzing this page.");
   }
-}
-
-function getTimeAgo(date) {
-  const seconds = Math.floor((new Date() - date) / 1000);
-
-  if (seconds < 60) return "Just now";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
-  return `${Math.floor(seconds / 86400)} days ago`;
-}
+});

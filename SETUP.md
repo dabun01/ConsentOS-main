@@ -20,18 +20,20 @@
 
 ---
 
-## Step 2: Configure ConsentOS
+## Step 2: Configure ConsentOS with .env
 
-1. Open the file: `my-extension/background.js`
-2. Find line 4 that says:
-   ```javascript
-   const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE";
-   ```
-3. Replace `YOUR_GEMINI_API_KEY_HERE` with your actual API key:
-   ```javascript
-   const GEMINI_API_KEY = "AIzaSy...your-actual-key...";
-   ```
-4. Save the file
+1. In the project root, create a local env file:
+   - Copy `.env.example` to `.env`
+2. Open `.env` and set your key:
+   - `GEMINI_API_KEY=AIzaSy...your-actual-key...`
+3. From the project root, run:
+   - `node scripts/inject-env.js`
+4. This generates `my-extension/env.json` for the extension runtime
+
+Important:
+
+- Re-run `node scripts/inject-env.js` any time you change `.env`
+- `.env` and `my-extension/env.json` are gitignored and should not be committed
 
 ---
 
@@ -98,14 +100,16 @@ For every consent popup, you'll see:
 
 ### No analysis appears
 
-- Check that you've added your API key correctly in `background.js`
+- Check that your key is set in `.env`
+- Re-run `node scripts/inject-env.js`
+- Reload the extension in `chrome://extensions/`
 - Open DevTools (F12) and check the Console for errors
 - Make sure your API key is valid (test it at Google AI Studio)
 
-### Analysis says "Unable to perform detailed AI analysis"
+### Analysis says API key is missing
 
-- This means the API key isn't configured
-- Go back to Step 2 and add your key
+- This means `my-extension/env.json` is missing or empty
+- Go back to Step 2 and run the inject step again
 
 ---
 
