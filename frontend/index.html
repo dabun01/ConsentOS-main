@@ -1,164 +1,97 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ConsentOS - Dashboard</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div class="container">
-    <header>
-      <p class="tagline">Real-time data consent translator</p>      
-      <h1>ConsentOS</h1>
-    </header>
-    
-    <div class="hero">
-      <h2>Understand what you're agreeing to</h2>
-      <p>
-        Nobody actually understands what they're agreeing to when they click "Accept Cookies." 
-        ConsentOS uses AI to translate complex legal terms into plain English, showing you exactly 
-        what data you're sharing and potential risks.
-      </p>
-      <a href="#install" class="cta-button">Get Started</a>
-    </div>
-    
-    <div class="features">
-      <div class="feature-card">
-        <h3>Automatic Detection</h3>       <div class="feature-icon">
-        <p>Automatically detects consent popups and cookie banners as you browse the web.</p>
-      </div>
-      
-      <div class="feature-card">
-        <h3>AI-Powered Analysis</h3>        <div class="feature-icon">
-        <p>Uses Google Gemini AI to analyze terms of service and privacy policies in real-time.</p>
-      </div>
-      
-      <div class="feature-card">
-        <div class="feature-</div>icon">
-        <h3>Risk Assessment</h3>
-        <p>Identifies potential concerns, data collection practices, and abuse scenarios.</p>
-      </div>
-      
-      <div class="feature-card">
-        <h3>Clear Recommendations</h3>        <div class="feature-icon">
-        <p>Provides actionable recommendations so you can make informed decisions.</p>
-      </div>
-      
-      <div class="feature-card">
-        <h3>Privacy Protection</h3>        <div class="feature-icon">
-        <p>All analysis happens locally with your API key - no data leaves your browser except to Gemini.</p>
-      </div>
-      
-      <div class="feature-card">
-        <h3>History Tracking</h3>        <div class="feature-icon">
-        <p>View your consent history and see which sites you've analyzed over time.</p>
-      </div>
-    </div>
-    
-    <div class="problem-section">
-      <p>      <h2>
-        Every day, billions of people click "Accept" on consent popups without understanding what 
-        they're agreeing to. These popups use complex legal language designed to confuse rather than inform.
-      </p>
-      <p>
-        Companies exploit this confusion to collect vast amounts of personal data, often sharing it 
-        with dozens of third parties. Users have no practical way to understand the implications of 
-        these agreements before accepting.
-      </p>
-      <p>
-        <strong>ConsentOS changes this.</strong> It acts as your personal privacy advocate, translating 
-        legalese into plain English and highlighting potential risks in real-time.
-      </p>
-      
-      <div class="stats">
-        <div class="stat-card">
-          <div class="stat-number">93%</div>
-          <div class="stat-label">Don't read terms</div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ConsentOS Mock Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg-shape shape-a" aria-hidden="true"></div>
+    <div class="bg-shape shape-b" aria-hidden="true"></div>
+
+    <main class="page-shell">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">ConsentOS mock site</p>
+          <h1>Privacy Risk Snapshot</h1>
+          <p class="subtitle">
+            A cleaner, higher-contrast redesign of your example cards.
+          </p>
         </div>
-        <div class="stat-card">
-          <div class="stat-number">180+</div>
-          <div class="stat-label">Avg. third parties</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number">$200B</div>
-          <div class="stat-label">Data broker industry</div>
-        </div>
-      </div>
-    </div>
-    
-    <div class="problem-section" id="install">
-      <h2> Installation</h2>
-      <p>
-        ConsentOS is a Chrome extension that runs locally in your browser. Follow these steps to get started:
-      </p>
-      
-      <div class="install-steps">
-        <h4>Step 1: Get a Gemini API Key</h4>
-        <ol>
-          <li>Visit <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a></li>
-          <li>Create a free API key (no credit card required)</li>
-          <li>Copy your API key</li>
-        </ol>
-      </div>
-      
-      <div class="install-steps">
-        <h4>Step 2: Configure the Extension</h4>
-        <ol>
-          <li>Download or clone the ConsentOS repository</li>
-          <li>Open <code>my-extension/background.js</code></li>
-          <li>Replace <code>YOUR_GEMINI_API_KEY_HERE</code> with your actual API key</li>
-          <li>Save the file</li>
-        </ol>
-      </div>
-      
-      <div class="install-steps">
-        <h4>Step 3: Load the Extension</h4>
-        <ol>
-          <li>Open Chrome and go to <code>chrome://extensions/</code></li>
-          <li>Enable "Developer mode" (toggle in top right)</li>
-          <li>Click "Load unpacked"</li>
-          <li>Select the <code>my-extension</code> folder</li>
-        </ol>          <li>ConsentOS is now active! 
-      </div>
-      
-      <p style="margin-top: 24px;">
-        <strong>That's it!</strong> Now when you visit websites with consent popups, ConsentOS will 
-        automatically detect and analyze them, showing you a clear breakdown of what you're agreeing to.
-      </p>
-    </div>
-    
-    <div class="problem-section">
-      <p>      <h2>
-        <strong>1. Detection:</strong> ConsentOS monitors web pages for consent popups and cookie banners 
-        using pattern matching and DOM observation.
-      </p>
-      <p>
-        <strong>2. Extraction:</strong> When a popup is detected, the extension extracts the consent text 
-        and related privacy policy URLs.
-      </p>
-      <p>
-        <strong>3. Analysis:</strong> The text is sent to Google Gemini AI, which analyzes it and provides 
-        a structured breakdown including:
-      </p>
-      <ul style="padding-left: 40px; color: #666; margin: 16px 0;">
-        <li>Plain-English summary of what you're agreeing to</li>
-        <li>Specific concerns and potential risks</li>
-        <li>Types of data that will be collected</li>
-        <li>Clear recommendation (Accept/Decline/Review)</li>
-      </ul>
-      <p>
-        <strong>4. Display:</strong> ConsentOS shows you this analysis in a beautiful overlay before you 
-        make a decision, empowering you to give truly informed consent.
-      </p>
-    </div>
-    
-    <footer>
-      <p>Built to empower users against predatory data practices</p>
-      <p style="margin-top: 8px;">
-        <small>© 2023 ConsentOS. All rights reserved.</small>
-      </p>
-    </footer>
-  </div>
-</body>
+        <button class="refresh-btn" type="button">Refresh scan</button>
+      </header>
+
+      <section class="card-grid" aria-label="Domain risk list">
+        <article class="risk-card">
+          <div class="left-block">
+            <div class="domain-row">
+              <span class="dot high" aria-hidden="true"></span>
+              <h2>youtube.com</h2>
+            </div>
+
+            <ul class="signals">
+              <li>Email</li>
+              <li>Third-party data sharing</li>
+              <li>Cross-site tracking</li>
+            </ul>
+          </div>
+
+          <div class="score-block">
+            <p class="score-label">Risk score</p>
+            <p class="score high">8/10</p>
+            <p class="score-note">High exposure</p>
+          </div>
+        </article>
+
+        <article class="risk-card">
+          <div class="left-block">
+            <div class="domain-row">
+              <span class="dot medium" aria-hidden="true"></span>
+              <h2>google.com</h2>
+            </div>
+
+            <ul class="signals">
+              <li>Email</li>
+              <li>Third-party data sharing</li>
+              <li>Location metadata</li>
+            </ul>
+          </div>
+
+          <div class="score-block">
+            <p class="score-label">Risk score</p>
+            <p class="score medium">6/10</p>
+            <p class="score-note">Review settings</p>
+          </div>
+        </article>
+
+        <article class="risk-card">
+          <div class="left-block">
+            <div class="domain-row">
+              <span class="dot low" aria-hidden="true"></span>
+              <h2>wikipedia.org</h2>
+            </div>
+
+            <ul class="signals">
+              <li>Session cookies</li>
+              <li>Basic analytics</li>
+              <li>No ad personalization</li>
+            </ul>
+          </div>
+
+          <div class="score-block">
+            <p class="score-label">Risk score</p>
+            <p class="score low">2/10</p>
+            <p class="score-note">Low concern</p>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
 </html>

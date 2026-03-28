@@ -110,24 +110,27 @@ analyzeBtn.addEventListener("click", async () => {
       files: ["content.js"],
     });
 
-    const extracted = injectionResults?.[0]?.result;
+    const extracted = (injectionResults || [])
+      .map((r) => r.result)
+      .find((result) => result && result.ok && result.data);
 
-    if (!extracted?.ok) {
-      output.textContent = extracted?.message || "No consent text found.";
-      extractedText.textContent =
-        extracted?.message || "No consent text found.";
+    if (!extracted) {
+      output.textContent = "No consent text found.";
+      extractedText.textContent = "No consent text found.";
       setBusyState(false, "No consent banner was detected on this page.");
       return;
     }
 
-    extractedText.textContent = extracted.text;
+    const extractedDataText = JSON.stringify(extracted.data, null, 2);
+    extractedText.textContent = extractedDataText;
+    output.textContent = extractedDataText;
     setBusyState(true, "Generating structured JSON summary...");
 
     output.textContent = "Sending text to Gemini...";
 
     const response = await chrome.runtime.sendMessage({
       type: "SUMMARIZE_CONSENT",
-      consentText: extracted.text,
+      consentText: extractedDataText,
     });
 
     if (!response?.ok) {
